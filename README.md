@@ -1,2 +1,2 @@
-# Farhat-AI-project3
+AI-project3
 DEP
