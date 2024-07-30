@@ -1,0 +1,112 @@
+import numpy as np
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+import tensorflow as tf
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout, Bidirectional
+import tensorflow_datasets as tfds
+
+# Load the dataset
+dataset, info = tfds.load("imdb_reviews", with_info=True, as_supervised=True)
+
+# Split the dataset
+train_data, test_data = dataset['train'], dataset['test']
+
+# Initialize tokenizer
+tokenizer = Tokenizer(num_words=10000, oov_token='<OOV>')
+train_sentences = []
+train_labels = []
+
+# Extract sentences and labels from the dataset
+for sentence, label in train_data:
+    train_sentences.append(str(sentence.numpy()))
+    train_labels.append(label.numpy())
+
+# Fit the tokenizer on the training data
+tokenizer.fit_on_texts(train_sentences)
+
+# Tokenize and pad the sequences
+train_sequences = tokenizer.texts_to_sequences(train_sentences)
+train_padded = pad_sequences(train_sequences, padding='post', maxlen=120)
+
+# Convert labels to numpy array
+train_labels = np.array(train_labels)
+
+# Prepare test data
+test_sentences = []
+test_labels = []
+
+for sentence, label in test_data:
+    test_sentences.append(str(sentence.numpy()))
+    test_labels.append(label.numpy())
+
+test_sequences = tokenizer.texts_to_sequences(test_sentences)
+test_padded = pad_sequences(test_sequences, padding='post', maxlen=120)
+test_labels = np.array(test_labels)
+
+# Build the model
+model = Sequential([
+    Embedding(10000, 64, input_length=120),
+    Bidirectional(LSTM(64, return_sequences=True)),
+    Bidirectional(LSTM(64)),
+    Dense(64, activation='relu'),
+    Dropout(0.5),
+    Dense(1, activation='sigmoid')
+])
+
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+model.summary()
+
+# Train the model
+history = model.fit(train_padded, train_labels, epochs=10, validation_data=(test_padded, test_labels), verbose=1)
+
+# Evaluate the model
+test_loss, test_acc = model.evaluate(test_padded, test_labels)
+print(f"Test Accuracy: {test_acc:.4f}")
+
+# Plot training history
+def plot_history(history):
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['accuracy'], label='Training Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.legend(loc='lower right')
+    plt.title('Training and Validation Accuracy')
+
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend(loc='upper right')
+    plt.title('Training and Validation Loss')
+
+    plt.show()
+
+plot_history(history)
+
+# Make predictions
+def predict_sentiment(text):
+    sequence = tokenizer.texts_to_sequences([text])
+    padded_sequence = pad_sequences(sequence, maxlen=120, padding='post')
+    prediction = model.predict(padded_sequence)[0][0]
+    sentiment = "Positive" if prediction >= 0.5 else "Negative"
+    return sentiment, prediction
+
+# Example prediction
+text = "The movie was fantastic and I enjoyed it a lot!"
+sentiment, score = predict_sentiment(text)
+print(f"Sentiment: {sentiment}, Score: {score:.4f}")
